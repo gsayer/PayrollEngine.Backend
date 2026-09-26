@@ -2,7 +2,8 @@
 """Exercise the actual result procedures in a disposable Docker database.
 
 Requires Python 3 and Docker, no Python packages or existing database. No ports
-are published. Synthetic persistence fixtures deliberately bypass foreign keys
+are published; each container has its own internal Docker network.
+Synthetic persistence fixtures deliberately bypass foreign keys
 on SQL Server; this is not a payrun lifecycle or application integration test.
 """
 import argparse
@@ -47,7 +48,7 @@ class Database:
             if database:
                 client.append(database)
         else:
-            client = ["/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa",
+            client = ["/opt/mssql-tools18/bin/sqlcmd", "-S", "tcp:127.0.0.1,1433", "-U", "sa",
                       "-C", "-b", "-r", "1", "-h", "-1", "-s", "|", "-W", "-w", "65535",
                       "-l", "5", "-d", database or "master"]
             sql = "SET NOCOUNT ON;\nGO\n" + sql
@@ -68,25 +69,21 @@ class Database:
                    ["--env", "ACCEPT_EULA=Y", "--env", "MSSQL_PID=Developer",
                     "--env", "MSSQL_SA_PASSWORD",
                     "--env", "MSSQL_MEMORY_LIMIT_MB=2048"])
-        data_mount = ("/var/lib/mysql:rw,size=1g" if self.mysql else
-                      "/var/opt/mssql:rw,size=2g,uid=10001,gid=0")
-        # Keep data on tmpfs; no host or anonymous database volume is needed.
-        subprocess.run(["docker", "run", "-d", "--name", self.name, "--network", "none",
-                        "--tmpfs", data_mount, "--tmpfs", "/tmp:rw,size=256m", *options, self.image],
-                       env=self.env, check=True, capture_output=True)
+        # MySQL can use tmpfs; SQL Server uses its image's normal data filesystem.
+        mounts = ["--tmpfs", "/var/lib/mysql:rw,size=1g", "--tmpfs", "/tmp:rw,size=256m"] if self.mysql else []
+        subprocess.run(["docker", "network", "create", "--internal", self.name],
+                       check=True, capture_output=True)
         try:
-            for attempt in range(90):
+            subprocess.run(["docker", "run", "-d", "--name", self.name, "--network", self.name,
+                            *mounts, *options, self.image], env=self.env, check=True, capture_output=True)
+            for attempt in range(30):
                 try:
                     self.execute("SELECT 1;", database=None)
                     break
                 except RuntimeError:
                     state = subprocess.check_output(
                         ["docker", "inspect", "--format", "{{.State.Status}}", self.name], text=True).strip()
-                    if state == "exited":
-                        logs = subprocess.run(["docker", "logs", "--tail", "30", self.name],
-                                              capture_output=True, text=True)
-                        raise RuntimeError(logs.stdout + logs.stderr)
-                    if attempt == 89:
+                    if state == "exited" or attempt == 29:
                         raise
                     time.sleep(2)
             self.execute((ROOT / "Database" / ("Create-Model.mysql.sql" if self.mysql
@@ -101,11 +98,17 @@ class Database:
                     self.execute(f"ALTER TABLE [{table}] NOCHECK CONSTRAINT ALL;")
             return self
         except BaseException:
+            logs = subprocess.run(["docker", "logs", "--tail", "60", self.name],
+                                  capture_output=True, text=True)
+            print(logs.stdout + logs.stderr, flush=True)
             self.__exit__(None, None, None)
             raise
 
     def __exit__(self, *_):
-        subprocess.run(["docker", "rm", "-f", "-v", self.name], check=True, capture_output=True)
+        try:
+            subprocess.run(["docker", "rm", "-f", "-v", self.name], check=True, capture_output=True)
+        finally:
+            subprocess.run(["docker", "network", "rm", self.name], check=True, capture_output=True)
 
     def identifier(self, name):
         return f"`{name}`" if self.mysql else f"[{name}]"

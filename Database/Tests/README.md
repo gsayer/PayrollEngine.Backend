@@ -11,10 +11,10 @@ SQL Server requires a host supported by Microsoft's Linux container image (the
 GitHub Actions job uses native x86-64). `--image` accepts a tag or digest override;
 `--output path.json` saves every assertion. The exit code is nonzero on failure.
 
-Each invocation creates its own randomly named, network-disabled container with
-no published ports or host volumes. It imports the real `Create-Model` script,
+Each invocation creates its own randomly named container and internal Docker
+network, with no published ports or host volumes. It imports the real `Create-Model` script,
 inserts synthetic result fixtures, executes the actual stored procedures, and
-removes the container and anonymous volumes on completion or an exception.
+removes the container, anonymous volumes and network on completion or an exception.
 No existing database or application instance is used.
 
 The same assertions run against the initial schema, after reapplying the nine
