@@ -139,7 +139,7 @@ class Database:
             for table in TABLES:
                 sql.append(self.insert(table, dict(common, PayrunJobId=row["id"], EmployeeId=1,
                     DivisionId=1, Start=row.get("start", "2026-01-01 00:00:00"),
-                    End="2026-01-31 23:59:59", StartHash=1, WageTypeNumber=1000,
+                    End="2026-01-31 23:59:59", StartHash=row.get("start_hash", 1), WageTypeNumber=1000,
                     CollectorName="synthetic", CollectorNameHash=1, Name="synthetic",
                     Value=row.get("value", 1000))))
         self.execute("\n".join(sql))
@@ -152,7 +152,10 @@ class Database:
         source = self.source(procedure).read_text(encoding="utf-8-sig")
         names = re.findall(r"^\s+IN p_(\w+)", source, re.M) if self.mysql else \
             re.findall(r"^\s+@(\w+) AS ", source, re.M)
-        values = dict(tenantId=1, employeeId=1, jobStatus=status, noRetro=0)
+        # Consolidated runtime queries always supply the completed period hashes.
+        # Unlike MySQL, SQL Server does not treat an absent period list as all periods.
+        values = dict(tenantId=1, employeeId=1, jobStatus=status, noRetro=0,
+                      periodStartHashes="[1]")
         if key_count:
             values.update(wageTypeNumbers=json.dumps([1000, 2000][:key_count]),
                           collectorNameHashes=json.dumps([1, 2][:key_count]),
@@ -178,13 +181,14 @@ def run_suite(db, stage, observations):
 
     # Different periods keep consolidation from hiding statuses. Status and forecast
     # are tested separately; these rows do not model public lifecycle transitions.
-    db.fixture([dict(id=s+1, status=s, start=f"2026-01-{s+1:02} 00:00:00") for s in range(7)])
+    db.fixture([dict(id=s+1, status=s, start=f"2026-01-{s+1:02} 00:00:00", start_hash=s+1)
+                for s in range(len(STATUSES))])
     for proc in PROCEDURES:
         for status in list(range(7)) + [None]:
             for key_count in range(3):  # unfiltered, single-key fast path, multi-key branch
                 check(f"status={status},keys={key_count}", proc,
                       list(range(1, 8)) if status is None else [status+1],
-                      status=status, key_count=key_count)
+                      status=status, key_count=key_count, periodStartHashes="[1,2,3,4,5,6,7]")
 
     completed = dict(id=20, status=3, value=1000)
     correction = dict(id=21, status=0, value=9999, created="2026-01-16 00:00:00")
