@@ -1,0 +1,59 @@
+name: Result status reproducer (before and after)
+
+on:
+  push:
+    branches: [test/ver336-job-status-regression]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: [mysql, sqlserver]
+        revision: [original, corrected]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: harness
+      - uses: actions/checkout@v4
+        with:
+          repository: gsayer/PayrollEngine.Backend
+          ref: ${{ matrix.revision == 'original' && 'ecd049ee43a64c130981301192a0f8ab36eed1ed' || 'ef22b161d31e6abc7a316cf35717cf9a241e239b' }}
+          path: backend
+      - name: Run real database regression and verify expected outcome
+        env:
+          PROVIDER: ${{ matrix.provider }}
+          REVISION: ${{ matrix.revision }}
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+          provider, revision = os.environ['PROVIDER'], os.environ['REVISION']
+          args = ['python3', 'harness/Database/Tests/result_job_status.py',
+                  '--repo', 'backend', '--provider', provider, '--output', 'result.json']
+          if revision == 'corrected':
+              args += ['--all-installations']
+          result = subprocess.run(args)
+          report = json.load(open('result.json'))
+          assert report['completed'], 'Infrastructure or SQL installation failure'
+          if revision == 'original':
+              assert result.returncode == 1 and report['assertions'] == 334
+              bug = [r for r in report['results'] if r['case'] == 'newer_draft_must_not_replace_complete']
+              assert len(bug) == 5
+              assert all(r['expected'] == [20] and r['actual'] == [21] and not r['passed'] for r in bug)
+              print(f"Confirmed original bug: {report['failures']} failing assertions; all five consolidated procedures select Draft.")
+          else:
+              assert result.returncode == 0 and report['failures'] == 0
+              assert report['assertions'] == (1002 if provider == 'mysql' else 668)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: result-status-${{ matrix.provider }}-${{ matrix.revision }}
+          path: result.json
+          if-no-files-found: error
