@@ -36,7 +36,7 @@ CREATE PROCEDURE dbo.[GetWageTypeResults]
   @periodStart AS DATETIME2(7) = NULL,
   -- period end
   @periodEnd AS DATETIME2(7) = NULL,
-  -- payrun job status (bit mask)
+  -- exact payrun job status (NULL leaves status unrestricted)
   @jobStatus AS INT = NULL,
   -- the forecast name
   @forecast AS VARCHAR(128) = NULL,
@@ -88,7 +88,7 @@ BEGIN
         OR wtr.[PayrunJobId] IN (
           SELECT pj.[Id] FROM dbo.[PayrunJob] pj
           WHERE pj.[Id] = wtr.[PayrunJobId]
-            AND pj.[JobStatus] & @jobStatus = pj.[JobStatus]
+            AND pj.[JobStatus] = @jobStatus
         )
       )
       AND (
@@ -136,7 +136,7 @@ BEGIN
         OR wtr.[PayrunJobId] IN (
           SELECT pj.[Id] FROM dbo.[PayrunJob] pj
           WHERE pj.[Id] = wtr.[PayrunJobId]
-            AND pj.[JobStatus] & @jobStatus = pj.[JobStatus]
+            AND pj.[JobStatus] = @jobStatus
         )
       )
       AND (

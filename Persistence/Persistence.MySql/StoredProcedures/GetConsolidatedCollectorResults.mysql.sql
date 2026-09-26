@@ -65,7 +65,7 @@ BEGIN
                    FROM JSON_TABLE(p_collectorNameHashes, '$[*]' COLUMNS (val VARCHAR(20) PATH '$')) AS jt)))
           AND (p_evaluationDate IS NULL OR r.Created <= p_evaluationDate)
           AND (p_jobStatus IS NULL OR r.PayrunJobId IN (
-                   SELECT pj.Id FROM PayrunJob pj WHERE (pj.JobStatus & p_jobStatus) = pj.JobStatus))
+                   SELECT pj.Id FROM PayrunJob pj WHERE pj.JobStatus = p_jobStatus))
           AND (r.Forecast IS NULL OR r.Forecast = p_forecast)
           AND (p_noRetro = 0 OR r.ParentJobId IS NULL)
           AND (p_excludeParentJobId IS NULL OR r.ParentJobId IS NULL

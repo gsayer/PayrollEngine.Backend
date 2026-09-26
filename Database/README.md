@@ -11,6 +11,39 @@ Current schema version: **1.0.0**
 
 The schema version is stored in the `Version` table and verified by the Backend on startup.
 
+## Result job-status filtering
+
+Result queries accept one `PayrunJobStatus`, not a bit mask. A non-null status
+matches exactly that status; `NULL` leaves status unrestricted. In particular,
+`Complete` must exclude open Draft/Release/Process corrections before selecting
+the latest result for a period. Forecast filtering remains a separate condition.
+
+For an existing database affected by [#15](https://github.com/Payroll-Engine/PayrollEngine.Backend/issues/15),
+updating the Backend binary alone is insufficient. Reapply these nine procedure
+files from `Persistence/Persistence.SqlServer/StoredProcedures/*.sql` or
+`Persistence/Persistence.MySql/StoredProcedures/*.mysql.sql`, using the matching
+provider and targeting the existing `PayrollEngine` database:
+
+- `GetConsolidatedWageTypeResults`
+- `GetConsolidatedWageTypeCustomResults`
+- `GetConsolidatedCollectorResults`
+- `GetConsolidatedCollectorCustomResults`
+- `GetConsolidatedPayrunResults`
+- `GetWageTypeResults`
+- `GetWageTypeCustomResults`
+- `GetCollectorResults`
+- `GetCollectorCustomResults`
+
+The files drop and recreate procedures, so apply them while payruns and result
+queries are quiescent, and stop on any SQL error (`sqlcmd -b` on SQL Server).
+No table/data migration or schema version change is required. Do not rerun the
+creation script or the older `0.9.7 → 1.0.0` migration to apply this procedure fix.
+New databases use the corrected creation scripts; the MySQL merged routine
+bundle includes the same correction.
+
+See [result status tests](Tests/README.md) for executable regression coverage of
+both providers, including creation scripts and procedure reapplication.
+
 ## Schema
 
 | Category          | Count | Description                                                   |

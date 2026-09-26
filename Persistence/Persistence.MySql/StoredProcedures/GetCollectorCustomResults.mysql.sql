@@ -48,7 +48,7 @@ BEGIN
       AND (p_jobStatus IS NULL OR ccr.PayrunJobId IN (
                SELECT pj.Id FROM PayrunJob pj
                WHERE pj.Id = ccr.PayrunJobId
-                 AND (pj.JobStatus & p_jobStatus) = pj.JobStatus))
+                 AND pj.JobStatus = p_jobStatus))
       AND (ccr.Forecast IS NULL OR ccr.Forecast = p_forecast)
       AND (p_evaluationDate IS NULL OR ccr.Created <= p_evaluationDate)
     ORDER BY ccr.Created;

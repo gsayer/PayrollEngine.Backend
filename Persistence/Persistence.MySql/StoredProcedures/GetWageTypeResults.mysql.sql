@@ -1,7 +1,7 @@
 -- =============================================================================
 -- GetWageTypeResults
 -- OPENJSON(@wageTypeNumbers) -> JSON_TABLE + JSON_LENGTH
--- [JobStatus] & @jobStatus = [JobStatus] -> (pj.JobStatus & p_jobStatus) = pj.JobStatus
+-- JobStatus is a single PayrunJobStatus value, not a bit mask.
 -- TOP (100) PERCENT ... ORDER BY -> ORDER BY (no TOP in MySQL)
 -- =============================================================================
 
@@ -51,7 +51,7 @@ BEGIN
       AND (p_jobStatus IS NULL OR wtr.PayrunJobId IN (
                SELECT pj.Id FROM PayrunJob pj
                WHERE pj.Id = wtr.PayrunJobId
-                 AND (pj.JobStatus & p_jobStatus) = pj.JobStatus))
+                 AND pj.JobStatus = p_jobStatus))
       AND (wtr.Forecast IS NULL OR wtr.Forecast = p_forecast)
       AND (p_evaluationDate IS NULL OR wtr.Created <= p_evaluationDate)
     ORDER BY wtr.Created;

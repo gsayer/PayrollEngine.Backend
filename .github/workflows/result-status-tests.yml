@@ -1,0 +1,43 @@
+name: Result status regression tests
+
+on:
+  push:
+    paths:
+      - 'Database/**'
+      - 'Persistence/Persistence.MySql/StoredProcedures/**'
+      - 'Persistence/Persistence.SqlServer/StoredProcedures/**'
+      - '.github/workflows/result-status-tests.yml'
+  pull_request:
+    paths:
+      - 'Database/**'
+      - 'Persistence/Persistence.MySql/StoredProcedures/**'
+      - 'Persistence/Persistence.SqlServer/StoredProcedures/**'
+      - '.github/workflows/result-status-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  result-status:
+    name: Result status (${{ matrix.provider }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: [mysql, sqlserver]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test creation scripts and procedure updates
+        run: >-
+          python3 Database/Tests/result_job_status.py
+          --provider ${{ matrix.provider }}
+          --output artifacts/result-status-${{ matrix.provider }}.json
+      - name: Upload assertion results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-status-${{ matrix.provider }}
+          path: artifacts/result-status-${{ matrix.provider }}.json
+          if-no-files-found: warn
